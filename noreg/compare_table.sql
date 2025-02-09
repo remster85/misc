@@ -26,10 +26,10 @@ BEGIN
                     ELSE ''DIFF'' 
                 END
             )',
-            column_name, column_name, column_name, 
-            column_name, column_name, 
-            column_name, column_name, column_name, 
-            column_name, column_name
+            column_name, column_name, column_name, -- JSON key, t1_value
+            column_name, column_name,             -- JSON key, t2_value
+            column_name,                          -- JSON key for _diff
+            column_name, column_name, column_name, column_name -- CASE statement
         ), ', '
     ) INTO json_build
     FROM INFORMATION_SCHEMA.COLUMNS 
@@ -44,17 +44,15 @@ BEGIN
     -- Construct final dynamic query
     sql_query := format(
         'SELECT t1.ref_id::INT AS ref_id, 
-                EXISTS (SELECT 1 FROM jsonb_each(jsonb_build_object(%s)) WHERE value->>''%s_diff'' = ''DIFF'') AS hasChanged,
+                (SELECT COUNT(*) FROM jsonb_each(jsonb_build_object(%s)) WHERE value->>''%s_diff'' = ''DIFF'') > 0 AS hasChanged,
                 jsonb_build_object(%s) AS changes
          FROM %I t1
          FULL JOIN %I t2 ON t1.ref_id = t2.ref_id
          ORDER BY t1.ref_id',
         json_build,  -- JSON difference builder
-        table1_name, -- Dynamic table name for column diff check
+        table1_name, -- Used in WHERE clause to check for any 'DIFF' values
         json_build,  -- JSON object construction
         table1_name, table2_name
     );
 
-    -- Execute the dynamic query and return results
-    RETURN QUERY EXECUTE sql_query;
-END $$;
+    -- E
