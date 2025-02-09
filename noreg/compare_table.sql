@@ -15,15 +15,15 @@ DECLARE
 BEGIN
     -- Generate JSON dynamically, EXCLUDING 'id' and timestamps
     SELECT STRING_AGG(
-        '"' || column_name || '": { ' ||
-        '"t1_value": "' || COALESCE(t1.' || column_name || '::TEXT, 'NULL') || '", ' ||
-        '"t2_value": "' || COALESCE(t2.' || column_name || '::TEXT, 'NULL') || '", ' ||
-        '"diff": "' || 
-        'CASE ' ||
-        'WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''NULL'' ' ||
-        'WHEN t1.' || column_name || ' = t2.' || column_name || ' THEN ''MATCH'' ' ||
-        'ELSE ''DIFF'' ' ||
-        'END' || '" }'
+        quote_literal(column_name) || ' || '': { ' ||
+        ' || ''"t1_value": "'' || COALESCE('' || quote_ident('t1.' || column_name) || '::TEXT, ''NULL'') || ''", ' ||
+        ' || ''"t2_value": "'' || COALESCE('' || quote_ident('t2.' || column_name) || '::TEXT, ''NULL'') || ''", ' ||
+        ' || ''"diff": "'' || ' ||
+        ' CASE ' ||
+        ' WHEN ' || quote_ident('t1.' || column_name) || ' IS NULL AND ' || quote_ident('t2.' || column_name) || ' IS NULL THEN ''NULL'' ' ||
+        ' WHEN ' || quote_ident('t1.' || column_name) || ' = ' || quote_ident('t2.' || column_name) || ' THEN ''MATCH'' ' ||
+        ' ELSE ''DIFF'' ' ||
+        ' END || ''" }'' '
     , ', ') INTO json_text
     FROM INFORMATION_SCHEMA.COLUMNS 
     WHERE table_name = table1_name
@@ -45,9 +45,3 @@ BEGIN
          ON t1.ref_id = t2.ref_id
          ORDER BY t1.ref_id';
 
-    -- ✅ Print the generated SQL query for debugging
-    RAISE NOTICE 'Generated SQL: %', sql_query;
-
-    -- Execute the dynamic query and return results
-    RETURN QUERY EXECUTE sql_query;
-END $$;
