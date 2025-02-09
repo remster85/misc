@@ -34,7 +34,7 @@ BEGIN
         RAISE EXCEPTION 'No matching columns found in table %', table1_name;
     END IF;
 
-    -- Construct the final dynamic SQL query
+    -- ✅ Construct the final dynamic SQL query properly
     sql_query := 
         'SELECT t1.ref_id::INT AS ref_id, 
                 EXISTS (SELECT 1 FROM jsonb_each((''{' || json_text || '}''::jsonb)) 
@@ -43,9 +43,9 @@ BEGIN
          FROM ' || quote_ident(table1_name) || ' t1
          FULL JOIN ' || quote_ident(table2_name) || ' t2 
          ON t1.ref_id = t2.ref_id
-         ORDER BY t1.ref_id;';
+         ORDER BY t1.ref_id';
 
-    -- ✅ Print the generated SQL query before execution
+    -- ✅ Debug: Print the generated SQL query before execution
     RAISE NOTICE 'Generated SQL Query: %', sql_query;
 
     -- Execute the dynamic query and return results
