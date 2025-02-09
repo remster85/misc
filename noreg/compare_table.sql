@@ -45,3 +45,9 @@ BEGIN
          ON t1.ref_id = t2.ref_id
          ORDER BY t1.ref_id';
 
+    -- ✅ Print the generated SQL query before execution
+    RAISE NOTICE 'Generated SQL Query: %', sql_query;
+
+    -- Execute the dynamic query and return results
+    RETURN QUERY EXECUTE sql_query;
+END $$;
