@@ -55,4 +55,6 @@ BEGIN
         table1_name, table2_name
     );
 
-    -- E
+    -- Execute the dynamic query and return results
+    RETURN QUERY EXECUTE sql_query;
+END $$;
