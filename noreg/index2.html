@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV JSON Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .diff { background-color: #ffcccc; }
+        .match { background-color: #ccffcc; }
+    </style>
+</head>
+<body>
+
+    <h2>CSV JSON Comparison Viewer</h2>
+    <label for="csvFile">Choose CSV File:</label>
+    <select id="csvFile" onchange="loadCSV()">
+        <option value="">-- Select File --</option>
+    </select>
+
+    <table id="dataTable">
+        <thead>
+            <tr id="tableHead">
+                <!-- Table headers will be inserted dynamically -->
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <!-- Table content will be inserted dynamically -->
+        </tbody>
+    </table>
+
+    <script>
+        const repoUrl = "https://your-github-username.github.io/your-repo-name/data/";
+
+        async function listCSVFiles() {
+            // Manually list CSV files in the repository (GitHub Pages doesn't support directory listing)
+            const files = ["data1.csv", "data2.csv"];
+            const select = document.getElementById("csvFile");
+
+            files.forEach(file => {
+                let option = document.createElement("option");
+                option.value = file;
+                option.textContent = file;
+                select.appendChild(option);
+            });
+        }
+
+        async function loadCSV() {
+            const file = document.getElementById("csvFile").value;
+            if (!file) return;
+
+            const response = await fetch(repoUrl + file);
+            const csvText = await response.text();
+            const data = parseCSV(csvText);
+            displayData(data);
+        }
+
+        function parseCSV(csvText) {
+            const rows = csvText.split("\n").map(row => row.trim()).filter(row => row);
+            const headers = rows[0].split(",");
+            const data = [];
+
+            for (let i = 1; i < rows.length; i++) {
+                let [ref_id, jsonString] = rows[i].split(/,(.+)/); // Split only at the first comma
+                jsonString = jsonString.replace(/""/g, '"').trim(); // Fix escaped quotes
+                try {
+                    const jsonObject = JSON.parse(jsonString);
+                    data.push({ ref_id, ...jsonObject });
+                } catch (error) {
+                    console.error("Error parsing JSON:", jsonString, error);
+                }
+            }
+
+            return data;
+        }
+
+        function displayData(data) {
+            const tableHead = document.getElementById("tableHead");
+            const tableBody = document.getElementById("tableBody");
+
+            tableHead.innerHTML = "";
+            tableBody.innerHTML = "";
+
+            if (data.length === 0) return;
+
+            // Extract dynamic headers
+            const columns = Object.keys(data[0]);
+            columns.forEach(col => {
+                let th = document.createElement("th");
+                th.textContent = col.replace(/_/g, " ");
+                tableHead.appendChild(th);
+            });
+
+            // Populate table rows
+            data.forEach(row => {
+                let tr = document.createElement("tr");
+                columns.forEach(col => {
+                    let td = document.createElement("td");
+                    td.textContent = row[col];
+
+                    // Highlight differences
+                    if (col.endsWith("_diff")) {
+                        td.className = row[col] === "DIFF" ? "diff" : "match";
+                    }
+
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Initialize file list
+        listCSVFiles();
+    </script>
+
+</body>
+</html>
