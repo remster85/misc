@@ -10,7 +10,6 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    col_list TEXT;
     json_build TEXT;
     sql_query TEXT;
 BEGIN
@@ -45,12 +44,14 @@ BEGIN
     -- Construct final dynamic query
     sql_query := format(
         'SELECT t1.ref_id::INT AS ref_id, 
-                EXISTS (SELECT 1 FROM jsonb_each(jsonb_build_object(%s)) WHERE value->>''%I_diff'' = ''DIFF'') AS hasChanged,
+                EXISTS (SELECT 1 FROM jsonb_each(jsonb_build_object(%s)) WHERE value->>''%s_diff'' = ''DIFF'') AS hasChanged,
                 jsonb_build_object(%s) AS changes
          FROM %I t1
          FULL JOIN %I t2 ON t1.ref_id = t2.ref_id
          ORDER BY t1.ref_id',
-        json_build,  -- Check if any column has a "DIFF" status
+        json_build,  -- JSON difference builder
+        table1_name, -- Dynamic table name for column diff check
+        json_build,  -- JSON object construction
         table1_name, table2_name
     );
 
