@@ -15,7 +15,7 @@ DECLARE
 BEGIN
     -- Generate JSON dynamically, EXCLUDING 'id' and timestamps
     SELECT STRING_AGG(
-        quote_literal(column_name) || ' || '': {' ||
+        quote_literal(quote_ident(column_name)) || ' || '': {' ||
         ' ''"t1_value": "'' || COALESCE(t1.' || quote_ident(column_name) || '::TEXT, ''NULL'') || ''", ' ||
         ' ''"t2_value": "'' || COALESCE(t2.' || quote_ident(column_name) || '::TEXT, ''NULL'') || ''", ' ||
         ' ''"diff": "'' || ' ||
