@@ -33,7 +33,7 @@ BEGIN
         RAISE EXCEPTION 'No matching columns found in table %', table1_name;
     END IF;
 
-    -- Construct final dynamic query
+    -- Construct final dynamic query using string concatenation
     sql_query := 
         'SELECT t1.ref_id::INT AS ref_id, 
                 (SELECT COUNT(*) FROM jsonb_each(jsonb_build_object(' || json_build || ')) 
