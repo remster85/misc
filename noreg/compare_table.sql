@@ -13,18 +13,18 @@ DECLARE
     json_build TEXT;
     sql_query TEXT;
 BEGIN
-    -- Generate JSON key-value pairs dynamically, EXCLUDING 'id' and timestamps
+    -- Generate JSON dynamically, EXCLUDING 'id' and timestamps
     SELECT string_agg(
-        '    "' || column_name || '": { ' ||
-        '    "t1_value": ' || 'COALESCE(' || 't1.' || column_name || '::TEXT, ''NULL'')' || ', ' ||
-        '    "t2_value": ' || 'COALESCE(' || 't2.' || column_name || '::TEXT, ''NULL'')' || ', ' ||
-        '    "diff": ' ||
+        '    ' || quote_literal(column_name) || ' , jsonb_build_object( ' ||
+        '    ''t1_value'', ' || 'COALESCE(t1.' || column_name || '::TEXT, ''NULL'')' || ', ' ||
+        '    ''t2_value'', ' || 'COALESCE(t2.' || column_name || '::TEXT, ''NULL'')' || ', ' ||
+        '    ''diff'', ' ||
         '    CASE ' ||
-        '        WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''"NULL"'' ' ||
-        '        WHEN t1.' || column_name || ' = t2.' || column_name || ' THEN ''"MATCH"'' ' ||
-        '        ELSE ''"DIFF"'' ' ||
+        '        WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''NULL'' ' ||
+        '        WHEN t1.' || column_name || ' = t2.' || column_name || ' THEN ''MATCH'' ' ||
+        '        ELSE ''DIFF'' ' ||
         '    END ' ||
-        '    }'
+        '    )'
     , ', ') INTO json_build
     FROM INFORMATION_SCHEMA.COLUMNS 
     WHERE table_name = table1_name
@@ -38,9 +38,9 @@ BEGIN
     -- Construct the final dynamic SQL query
     sql_query := 
         'SELECT t1.ref_id::INT AS ref_id, 
-                EXISTS (SELECT 1 FROM jsonb_each((''{' || json_build || '}''::jsonb)) 
+                EXISTS (SELECT 1 FROM jsonb_each(jsonb_build_object(' || json_build || ')) 
                  WHERE value->>''diff'' = ''DIFF'') AS hasChanged,
-                (''{' || json_build || '}''::jsonb) AS changes
+                jsonb_build_object(' || json_build || ') AS changes
          FROM ' || table1_name || ' t1
          FULL JOIN ' || table2_name || ' t2 
          ON t1.ref_id = t2.ref_id
