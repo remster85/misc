@@ -39,9 +39,9 @@ BEGIN
     -- Construct the final dynamic SQL query
     sql_query := 
         'SELECT t1.ref_id::INT AS ref_id, 
-                (SELECT COUNT(*) FROM jsonb_each((''{' || json_build || '}'')::jsonb) 
+                (SELECT COUNT(*) FROM jsonb_each((''{' || json_build || '}''::jsonb)) 
                  WHERE value->>''diff'' = ''DIFF'') > 0 AS hasChanged,
-                (''{' || json_build || '}'')::jsonb AS changes
+                (''{' || json_build || '}''::jsonb) AS changes
          FROM ' || table1_name || ' t1
          FULL JOIN ' || table2_name || ' t2 
          ON t1.ref_id = t2.ref_id
