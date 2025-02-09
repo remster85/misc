@@ -16,14 +16,14 @@ BEGIN
     -- Generate JSON dynamically, EXCLUDING 'id' and timestamps
     SELECT STRING_AGG(
         '"' || column_name || '": {' ||
-        '"t1_value": "' || COALESCE(''' || quote_ident('t1') || '.' || quote_ident(column_name) || '''::TEXT', '''NULL''') || '", ' ||
-        '"t2_value": "' || COALESCE(''' || quote_ident('t2') || '.' || quote_ident(column_name) || '''::TEXT', '''NULL''') || '", ' ||
+        '"t1_value": "' || COALESCE(''|| quote_ident('t1') || '.' || quote_ident(column_name) || '::TEXT', '''NULL''') || '", ' ||
+        '"t2_value": "' || COALESCE(''|| quote_ident('t2') || '.' || quote_ident(column_name) || '::TEXT', '''NULL''') || '", ' ||
         '"diff": "' ||
         ' CASE ' ||
         ' WHEN ' || quote_ident('t1') || '.' || quote_ident(column_name) || ' IS NULL AND ' || quote_ident('t2') || '.' || quote_ident(column_name) || ' IS NULL THEN ''NULL'' ' ||
         ' WHEN ' || quote_ident('t1') || '.' || quote_ident(column_name) || ' = ' || quote_ident('t2') || '.' || quote_ident(column_name) || ' THEN ''MATCH'' ' ||
         ' ELSE ''DIFF'' ' ||
-        ' END || '" }' 
+        ' END || '" }"' 
     , ', ') INTO json_text
     FROM INFORMATION_SCHEMA.COLUMNS 
     WHERE table_name = table1_name
