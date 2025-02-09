@@ -43,11 +43,11 @@ BEGIN
          FROM ' || quote_ident(table1_name) || ' t1
          FULL JOIN ' || quote_ident(table2_name) || ' t2 
          ON t1.ref_id = t2.ref_id
-         ORDER BY t1.ref_id';
+         ORDER BY t1.ref_id;';
 
     -- ✅ Debug: Print the generated SQL query before execution
     RAISE NOTICE 'Generated SQL Query: %', sql_query;
 
-    -- Execute the dynamic query and return results
+    -- ✅ Ensure the final query is properly terminated and executed
     RETURN QUERY EXECUTE sql_query;
 END $$;
