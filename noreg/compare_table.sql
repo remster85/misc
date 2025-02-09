@@ -13,12 +13,12 @@ DECLARE
     json_build TEXT;
     sql_query TEXT;
 BEGIN
-    -- Generate the dynamic JSON key-value pairs (excluding ID and timestamps)
+    -- Generate the JSON structure dynamically, EXCLUDING 'id' and timestamps
     SELECT string_agg(
         '    ''' || column_name || ''': { ' ||
-        '    ''t1_value'': '''' || COALESCE(t1.' || column_name || '::TEXT, ''NULL'') || '''', ' ||
-        '    ''t2_value'': '''' || COALESCE(t2.' || column_name || '::TEXT, ''NULL'') || '''', ' ||
-        '    ''diff'': '''' || ' ||
+        '    ''t1_value'': ''' || COALESCE(''||t1.' || column_name || '::TEXT||', 'NULL') || ''', ' ||
+        '    ''t2_value'': ''' || COALESCE(''||t2.' || column_name || '::TEXT||', 'NULL') || ''', ' ||
+        '    ''diff'': ''' || 
         '    CASE ' ||
         '        WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''NULL'' ' ||
         '        WHEN t1.' || column_name || ' = t2.' || column_name || ' THEN ''MATCH'' ' ||
@@ -36,12 +36,12 @@ BEGIN
         RAISE EXCEPTION 'No matching columns found in table %', table1_name;
     END IF;
 
-    -- Construct final dynamic query using text-based JSON construction
+    -- Construct the final dynamic SQL query
     sql_query := 
         'SELECT t1.ref_id::INT AS ref_id, 
-                (SELECT COUNT(*) FROM jsonb_each((''{' || ' || json_build || ' || '}'')::jsonb) 
+                (SELECT COUNT(*) FROM jsonb_each((''{' || json_build || '}'')::jsonb) 
                  WHERE value->>''diff'' = ''DIFF'') > 0 AS hasChanged,
-                (''{' || ' || json_build || ' || '}'')::jsonb AS changes
+                (''{' || json_build || '}'')::jsonb AS changes
          FROM ' || table1_name || ' t1
          FULL JOIN ' || table2_name || ' t2 
          ON t1.ref_id = t2.ref_id
