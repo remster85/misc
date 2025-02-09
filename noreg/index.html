@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Data Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .diff { background-color: #ffcccc; }
+        .match { background-color: #ccffcc; }
+    </style>
+</head>
+<body>
+
+    <h2>Data Comparison</h2>
+    <label for="jsonFile">Choose JSON File:</label>
+    <select id="jsonFile" onchange="loadJSON()">
+        <option value="">-- Select File --</option>
+    </select>
+
+    <table id="dataTable">
+        <thead>
+            <tr id="tableHead">
+                <!-- Table headers will be inserted dynamically -->
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <!-- Table content will be inserted dynamically -->
+        </tbody>
+    </table>
+
+    <script>
+        const repoUrl = "https://your-github-username.github.io/your-repo-name/data/";
+
+        async function listJSONFiles() {
+            // List available JSON files (manual list since GitHub Pages doesn't support directory listing)
+            const files = ["data1.json", "data2.json"]; // Add your JSON filenames here manually
+            const select = document.getElementById("jsonFile");
+
+            files.forEach(file => {
+                let option = document.createElement("option");
+                option.value = file;
+                option.textContent = file;
+                select.appendChild(option);
+            });
+        }
+
+        async function loadJSON() {
+            const file = document.getElementById("jsonFile").value;
+            if (!file) return;
+
+            const response = await fetch(repoUrl + file);
+            const data = await response.json();
+            displayData(data);
+        }
+
+        function displayData(data) {
+            const tableHead = document.getElementById("tableHead");
+            const tableBody = document.getElementById("tableBody");
+
+            tableHead.innerHTML = "";
+            tableBody.innerHTML = "";
+
+            if (data.length === 0) return;
+
+            // Extract column headers dynamically
+            const columns = Object.keys(data[0]);
+            columns.forEach(col => {
+                let th = document.createElement("th");
+                th.textContent = col.replace(/_/g, " ");
+                tableHead.appendChild(th);
+            });
+
+            // Populate table rows
+            data.forEach(row => {
+                let tr = document.createElement("tr");
+                columns.forEach(col => {
+                    let td = document.createElement("td");
+                    td.textContent = row[col];
+
+                    // Highlight differences
+                    if (col.endsWith("_diff")) {
+                        td.className = row[col] === "DIFF" ? "diff" : "match";
+                    }
+
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Initialize file list
+        listJSONFiles();
+    </script>
+
+</body>
+</html>
