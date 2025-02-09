@@ -15,7 +15,7 @@ DECLARE
 BEGIN
     -- Generate JSON dynamically, EXCLUDING 'id' and timestamps
     SELECT string_agg(
-        '    ' || quote_literal(column_name) || ': jsonb_build_object( ' ||
+        quote_literal(column_name) || ' , jsonb_build_object( ' ||
         '    ''t1_value'', COALESCE(t1.' || quote_ident(column_name) || '::TEXT, ''NULL''), ' ||
         '    ''t2_value'', COALESCE(t2.' || quote_ident(column_name) || '::TEXT, ''NULL''), ' ||
         '    ''diff'', ' ||
@@ -45,6 +45,9 @@ BEGIN
          FULL JOIN ' || quote_ident(table2_name) || ' t2 
          ON t1.ref_id = t2.ref_id
          ORDER BY t1.ref_id';
+
+    -- ✅ Print the generated SQL query for debugging
+    RAISE NOTICE 'Generated SQL: %', sql_query;
 
     -- Execute the dynamic query and return results
     RETURN QUERY EXECUTE sql_query;
