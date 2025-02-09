@@ -13,18 +13,18 @@ DECLARE
     json_build TEXT;
     sql_query TEXT;
 BEGIN
-    -- Generate the JSON structure dynamically, EXCLUDING 'id' and timestamps
+    -- Generate JSON dynamically, EXCLUDING 'id' and timestamps
     SELECT string_agg(
-        '    ''' || column_name || ''': { ' ||
-        '    ''t1_value'': ''' || COALESCE(''||t1.' || column_name || '::TEXT||', 'NULL') || ''', ' ||
-        '    ''t2_value'': ''' || COALESCE(''||t2.' || column_name || '::TEXT||', 'NULL') || ''', ' ||
-        '    ''diff'': ''' || 
+        '    "' || column_name || '": { ' ||
+        '    "t1_value": "' || ' || COALESCE(t1.' || column_name || '::TEXT, ''NULL'') || '", ' ||
+        '    "t2_value": "' || ' || COALESCE(t2.' || column_name || '::TEXT, ''NULL'') || '", ' ||
+        '    "diff": "' || 
         '    CASE ' ||
         '        WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''NULL'' ' ||
         '        WHEN t1.' || column_name || ' = t2.' || column_name || ' THEN ''MATCH'' ' ||
         '        ELSE ''DIFF'' ' ||
         '    END ' ||
-        '    || '''' ' ||
+        '    || '"' ||
         '    }'
     , ', ') INTO json_build
     FROM INFORMATION_SCHEMA.COLUMNS 
