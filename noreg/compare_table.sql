@@ -13,17 +13,17 @@ DECLARE
     json_build TEXT;
     sql_query TEXT;
 BEGIN
-    -- Generate the dynamic JSON comparison, EXCLUDING 'id' and timestamps
+    -- Generate JSON key-value pairs dynamically, EXCLUDING 'id' and timestamps
     SELECT string_agg(
-        ' ''' || column_name || ''' , jsonb_build_object( ' ||
-        ' ''' || column_name || '_t1'', t1.' || column_name || '::TEXT, ' ||
-        ' ''' || column_name || '_t2'', t2.' || column_name || '::TEXT, ' ||
-        ' ''' || column_name || '_diff'', ' ||
-        ' CASE WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''NULL'' ' ||
-        ' WHEN t1.' || column_name || ' = t2.' || column_name || ' THEN ''MATCH'' ' ||
-        ' ELSE ''DIFF'' END ) ',
-        ', '
-    ) INTO json_build
+        '''' || column_name || ''': { ' ||
+        '''t1_value'': '''' || COALESCE(t1.' || column_name || '::TEXT, 'NULL') || '''', ' ||
+        '''t2_value'': '''' || COALESCE(t2.' || column_name || '::TEXT, 'NULL') || '''', ' ||
+        '''diff'': '''' || 
+        'CASE WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''NULL'' ' ||
+        'WHEN t1.' || column_name || ' = t2.' || column_name || ' THEN ''MATCH'' ' ||
+        'ELSE ''DIFF'' END || '''' }''' 
+        , ', ') 
+    INTO json_build
     FROM INFORMATION_SCHEMA.COLUMNS 
     WHERE table_name = table1_name
     AND column_name NOT IN ('id', 'created_at', 'updated_at');  -- Exclude ID and timestamps
@@ -33,12 +33,12 @@ BEGIN
         RAISE EXCEPTION 'No matching columns found in table %', table1_name;
     END IF;
 
-    -- Construct final dynamic query using string concatenation
+    -- Construct final dynamic query using text-based JSON construction
     sql_query := 
         'SELECT t1.ref_id::INT AS ref_id, 
-                (SELECT COUNT(*) FROM jsonb_each(jsonb_build_object(' || json_build || ')) 
-                 WHERE value->>''_diff'' = ''DIFF'') > 0 AS hasChanged,
-                jsonb_build_object(' || json_build || ') AS changes
+                (SELECT COUNT(*) FROM jsonb_each_text((''{' || ' || json_build || ' || '}'')::jsonb) 
+                 WHERE value = ''DIFF'') > 0 AS hasChanged,
+                (''{' || ' || json_build || ' || '}'')::jsonb AS changes
          FROM ' || table1_name || ' t1
          FULL JOIN ' || table2_name || ' t2 
          ON t1.ref_id = t2.ref_id
