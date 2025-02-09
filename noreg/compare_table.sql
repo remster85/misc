@@ -16,8 +16,8 @@ BEGIN
     -- Generate JSON key-value pairs dynamically, EXCLUDING 'id' and timestamps
     SELECT string_agg(
         '    "' || column_name || '": { ' ||
-        '    "t1_value": ' || COALESCE(''"' || t1.' || column_name || '::TEXT || '"' , 'NULL') || ', ' ||
-        '    "t2_value": ' || COALESCE(''"' || t2.' || column_name || '::TEXT || '"' , 'NULL') || ', ' ||
+        '    "t1_value": ' || 'COALESCE(' || 't1.' || column_name || '::TEXT, ''NULL'')' || ', ' ||
+        '    "t2_value": ' || 'COALESCE(' || 't2.' || column_name || '::TEXT, ''NULL'')' || ', ' ||
         '    "diff": ' ||
         '    CASE ' ||
         '        WHEN t1.' || column_name || ' IS NULL AND t2.' || column_name || ' IS NULL THEN ''"NULL"'' ' ||
