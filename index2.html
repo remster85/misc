@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Table Differences</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f4f4f4;
+            cursor: pointer;
+        }
+        #filters {
+            margin-bottom: 10px;
+        }
+        #summary {
+            font-weight: bold;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Compare Table Differences</h2>
+
+    <input type="file" id="csvFile" accept=".csv">
+
+    <div id="summary">
+        Net PnL Impact: <span id="netPnlImpact">0</span> | 
+        Number of Trades Impacted: <span id="tradeCount">0</span>
+    </div>
+
+    <div id="filters">
+        <label for="fieldFilter">Filter by Field:</label>
+        <select id="fieldFilter">
+            <option value="all">All</option>
+        </select>
+
+        <label for="rateFilter">Filter on Rate Level Used:</label>
+        <select id="rateFilter">
+            <option value="all">All</option>
+            <option value="rate_resolved">RATE Resolved (RATE_MISSING -> other)</option>
+        </select>
+
+        <label for="nbiFilter">Filter on NBI Change:</label>
+        <select id="nbiFilter">
+            <option value="all">All</option>
+            <option value="nbi_changed">NBI Changed</option>
+        </select>
+
+        <label for="anyFilter">Filter on Any Difference:</label>
+        <select id="anyFilter">
+            <option value="all">All</option>
+            <option value="any_difference">Any Difference</option>
+        </select>
+    </div>
+
+    <table id="resultTable">
+        <thead>
+            <tr>
+                <th onclick="sortTable(0)">Ref ID</th>
+                <th>Fields in Difference</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        document.getElementById('csvFile').addEventListener('change', handleFile);
+        document.getElementById('fieldFilter').addEventListener('change', filterTable);
+        document.getElementById('rateFilter').addEventListener('change', filterTable);
+        document.getElementById('nbiFilter').addEventListener('change', filterTable);
+        document.getElementById('anyFilter').addEventListener('change', filterTable);
+
+        let tableData = [];
+
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const lines = e.target.result.split("\n").map(line => line.trim()).filter(line => line);
+                tableData = lines.slice(1).map(line => line.split(","));
+
+                displayTable(tableData);
+                populateFieldFilter(tableData);
+            };
+            reader.readAsText(file);
+        }
+
+        function displayTable(data) {
+            const tbody = document.querySelector("#resultTable tbody");
+            tbody.innerHTML = "";
+
+            data.forEach(row => {
+                const tr = document.createElement("tr");
+                row.forEach(cell => {
+                    const td = document.createElement("td");
+                    td.textContent = cell;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            updateSummary(data);
+            filterTable();
+        }
+
+        function populateFieldFilter(data) {
+            const fieldFilter = document.getElementById("fieldFilter");
+            const uniqueFields = new Set();
+
+            data.forEach(row => {
+                if (row.length > 1) {
+                    const differences = row[1].split(", ");
+                    differences.forEach(diff => {
+                        const field = diff.split(":")[0].trim();
+                        uniqueFields.add(field);
+                    });
+                }
+            });
+
+            fieldFilter.innerHTML = '<option value="all">All</option>';
+            uniqueFields.forEach(field => {
+                const option = document.createElement("option");
+                option.value = field;
+                option.textContent = field;
+                fieldFilter.appendChild(option);
+            });
+        }
+
+        function filterTable() {
+            const fieldFilter = document.getElementById("fieldFilter").value;
+            const rateFilter = document.getElementById("rateFilter").value;
+            const nbiFilter = document.getElementById("nbiFilter").value;
+            const anyFilter = document.getElementById("anyFilter").value;
+
+            const tbody = document.querySelector("#resultTable tbody");
+            tbody.innerHTML = "";
+
+            tableData.forEach(row => {
+                if (row.length < 2) return;
+
+                const refId = row[0];
+                const fieldsInDifference = row[1];
+
+                let matchesField = fieldFilter === "all" || fieldsInDifference.includes(fieldFilter);
+                let matchesRate = rateFilter === "all" || (rateFilter === "rate_resolved" && fieldsInDifference.includes("rate_level_used: RATE_MISSING ->"));
+                let matchesNBI = nbiFilter === "all" || (nbiFilter === "nbi_changed" && fieldsInDifference.includes("nbi_eur:"));
+                let matchesAny = anyFilter === "all" || (anyFilter === "any_difference" && fieldsInDifference !== "");
+
+                if (matchesField && matchesRate && matchesNBI && matchesAny) {
+                    const tr = document.createElement("tr");
+                    row.forEach(cell => {
+                        const td = document.createElement("td");
+                        td.textContent = cell;
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                }
+            });
+
+            updateSummary(tableData);
+        }
+
+        function updateSummary(data) {
+            let netPnlImpact = 0;
+            let tradeCount = 0;
+
+            data.forEach(row => {
+                if (row.length < 2) return;
+
+                const fieldsInDifference = row[1];
+                if (fieldsInDifference !== "") {
+                    tradeCount++;
+                }
+
+                const nbiChangeMatch = fieldsInDifference.match(/nbi_eur:\s*([\d.-]+)\s*->\s*([\d.-]+)/);
+                if (nbiChangeMatch) {
+                    const oldNBI = parseFloat(nbiChangeMatch[1]);
+                    const newNBI = parseFloat(nbiChangeMatch[2]);
+                    netPnlImpact += Math.abs(newNBI - oldNBI);
+                }
+            });
+
+            document.getElementById("netPnlImpact").textContent = netPnlImpact.toFixed(2);
+            document.getElementById("tradeCount").textContent = tradeCount;
+        }
+
+        function sortTable(columnIndex) {
+            const tbody = document.querySelector("#resultTable tbody");
+            let rows = Array.from(tbody.rows);
+
+            rows.sort((rowA, rowB) => {
+                let cellA = rowA.cells[columnIndex].textContent.trim();
+                let cellB = rowB.cells[columnIndex].textContent.trim();
+
+                if (!isNaN(cellA) && !isNaN(cellB)) {
+                    return Number(cellB) - Number(cellA);
+                }
+                return cellA.localeCompare(cellB);
+            });
+
+            tbody.innerHTML = "";
+            rows.forEach(row => tbody.appendChild(row));
+        }
+    </script>
+
+</body>
+</html>
