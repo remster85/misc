@@ -73,12 +73,19 @@
 
             const reader = new FileReader();
             reader.onload = function (e) {
-                const lines = e.target.result.split("\n").map(line => line.trim());
-                tableData = lines.slice(1).map(line => line.split(",")); // Ignore header
-
-                displayTable(tableData);
+                parseCSV(e.target.result);
             };
             reader.readAsText(file);
+        }
+
+        function parseCSV(csvText) {
+            const delimiter = csvText.includes(";") ? ";" : ","; // Detect delimiter
+            const lines = csvText.split("\n").map(line => line.trim()).filter(line => line);
+            if (lines.length < 2) return;
+
+            tableData = lines.slice(1).map(line => line.split(delimiter).map(cell => cell.trim()));
+
+            displayTable(tableData);
         }
 
         function displayTable(data) {
@@ -86,6 +93,8 @@
             tbody.innerHTML = "";
 
             data.forEach(row => {
+                if (row.length < 6) return; // Ensure all columns exist
+
                 const tr = document.createElement("tr");
                 row.forEach(cell => {
                     const td = document.createElement("td");
@@ -104,10 +113,12 @@
             tbody.innerHTML = "";
 
             let filteredData = tableData.filter(row => {
+                if (row.length < 6) return false; // Ensure valid row
+
                 const rateBefore = row[1].trim();
                 const rateAfter = row[2].trim();
-                const nbiBefore = row[3].trim();
-                const nbiAfter = row[4].trim();
+                const nbiBefore = parseFloat(row[3].trim());
+                const nbiAfter = parseFloat(row[4].trim());
 
                 const isNbiDifferent = nbiBefore !== nbiAfter;
                 const isRateResolved = rateBefore === "RATE_MISSING" && rateAfter !== "RATE_MISSING";
@@ -120,8 +131,6 @@
 
                 return false;
             });
-
-            filteredData.sort((a, b) => (b[3] - b[4]) - (a[3] - a[4])); // Sort by NBI difference
 
             filteredData.forEach(row => {
                 const tr = document.createElement("tr");
@@ -138,7 +147,7 @@
 
         function updateSummary(data) {
             const totalMatches = data.length;
-            const totalNbiChange = data.reduce((sum, row) => sum + (row[4] - row[3]), 0);
+            const totalNbiChange = data.reduce((sum, row) => sum + (parseFloat(row[4]) - parseFloat(row[3])), 0);
 
             document.getElementById("summary").textContent = `Matches: ${totalMatches} | Total NBI Change: ${totalNbiChange}`;
         }
