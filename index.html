@@ -38,10 +38,10 @@
     <div>
         <label for="filter">Filter Results:</label>
         <select id="filter">
-            <option value="all">Any Difference</option>
-            <option value="nbi_only">Only NBI Difference</option>
-            <option value="rates_resolved">Only Rates Resolved</option>
-            <option value="rates_changed">Only Rates Changed</option>
+            <option value="all">All</option>
+            <option value="different_nbi">Show Only Different NBI</option>
+            <option value="not_missing_rate">No Longer RATE_MISSING</option>
+            <option value="both">Different NBI & No Longer RATE_MISSING</option>
         </select>
     </div>
 
@@ -73,19 +73,12 @@
 
             const reader = new FileReader();
             reader.onload = function (e) {
-                parseCSV(e.target.result);
+                const lines = e.target.result.split("\n").map(line => line.trim());
+                tableData = lines.slice(1).map(line => line.split(",")); // Ignore header
+
+                displayTable(tableData);
             };
             reader.readAsText(file);
-        }
-
-        function parseCSV(csvText) {
-            const delimiter = csvText.includes(";") ? ";" : ","; // Detect delimiter
-            const lines = csvText.split("\n").map(line => line.trim()).filter(line => line);
-            if (lines.length < 2) return;
-
-            tableData = lines.slice(1).map(line => line.split(delimiter).map(cell => cell.trim()));
-
-            displayTable(tableData);
         }
 
         function displayTable(data) {
@@ -93,8 +86,6 @@
             tbody.innerHTML = "";
 
             data.forEach(row => {
-                if (row.length < 6) return; // Ensure all columns exist
-
                 const tr = document.createElement("tr");
                 row.forEach(cell => {
                     const td = document.createElement("td");
@@ -113,24 +104,22 @@
             tbody.innerHTML = "";
 
             let filteredData = tableData.filter(row => {
-                if (row.length < 6) return false; // Ensure valid row
+                const nbiBefore = row[3];
+                const nbiAfter = row[4];
+                const rateAfter = row[2];
 
-                const rateBefore = row[1].trim();
-                const rateAfter = row[2].trim();
-                const nbiBefore = parseFloat(row[3].trim());
-                const nbiAfter = parseFloat(row[4].trim());
+                const isDifferentNbi = nbiBefore !== nbiAfter;
+                const isNotMissingRate = rateAfter !== "RATE_MISSING";
 
-                const isNbiDifferent = nbiBefore !== nbiAfter;
-                const isRateResolved = rateBefore === "RATE_MISSING" && rateAfter !== "RATE_MISSING";
-                const isRateChanged = rateBefore !== "RATE_MISSING" && rateBefore !== rateAfter;
-
-                if (filterValue === "all" && (isNbiDifferent || isRateResolved || isRateChanged)) return true;
-                if (filterValue === "nbi_only" && isNbiDifferent) return true;
-                if (filterValue === "rates_resolved" && isRateResolved) return true;
-                if (filterValue === "rates_changed" && isRateChanged) return true;
+                if (filterValue === "all") return true;
+                if (filterValue === "different_nbi" && isDifferentNbi) return true;
+                if (filterValue === "not_missing_rate" && isNotMissingRate) return true;
+                if (filterValue === "both" && isDifferentNbi && isNotMissingRate) return true;
 
                 return false;
             });
+
+            filteredData.sort((a, b) => (b[3] - b[4]) - (a[3] - a[4])); // Sort by NBI difference
 
             filteredData.forEach(row => {
                 const tr = document.createElement("tr");
@@ -147,7 +136,7 @@
 
         function updateSummary(data) {
             const totalMatches = data.length;
-            const totalNbiChange = data.reduce((sum, row) => sum + (parseFloat(row[4]) - parseFloat(row[3])), 0);
+            const totalNbiChange = data.reduce((sum, row) => sum + (row[4] - row[3]), 0);
 
             document.getElementById("summary").textContent = `Matches: ${totalMatches} | Total NBI Change: ${totalNbiChange}`;
         }
