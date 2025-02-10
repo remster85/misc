@@ -1,0 +1,216 @@
+
+
+-- PostgreSQL Function to Compare Tables and Export Differences
+
+CREATE OR REPLACE FUNCTION compare_tables_to_temp(table1 TEXT, table2 TEXT)
+RETURNS VOID AS $$
+DECLARE
+    dynamic_query TEXT;
+BEGIN
+    -- Drop the temp table if it already exists
+    DROP TABLE IF EXISTS temp_compare_results;
+
+    -- Create a temp table to store the results
+    CREATE TEMP TABLE temp_compare_results (
+        ref_id INT,
+        rate_level_used_before TEXT,
+        rate_level_used_after TEXT,
+        nbi_before TEXT,
+        nbi_after TEXT,
+        fields_in_difference TEXT
+    ) ON COMMIT DROP;
+
+    -- Construct the dynamic SQL query
+    dynamic_query := format(
+        $f$
+        INSERT INTO temp_compare_results
+        WITH diff AS (
+            SELECT 
+                t1.ref_id,
+                t1.rate_level_used AS rate_level_used_before,
+                t2.rate_level_used AS rate_level_used_after,
+                t1.nbi AS nbi_before,
+                t2.nbi AS nbi_after,
+                STRING_AGG(
+                    CASE 
+                        WHEN t1.col IS DISTINCT FROM t2.col THEN col_name
+                        ELSE NULL
+                    END, ', ') AS fields_in_difference
+            FROM %1$I t1
+            JOIN %2$I t2 ON t1.ref_id = t2.ref_id
+            CROSS JOIN LATERAL (
+                SELECT column_name AS col_name, 
+                    (t1.*)::TEXT AS col, 
+                    (t2.*)::TEXT AS col
+                FROM information_schema.columns 
+                WHERE table_name = %1$L
+                AND column_name NOT IN ('id', 'ref_id') -- Only ignore 'id', include 'consensys_data_keys'
+            ) sub
+            GROUP BY t1.ref_id, t1.rate_level_used, t2.rate_level_used, t1.nbi, t2.nbi
+            HAVING COUNT(*) FILTER (WHERE t1.col IS DISTINCT FROM t2.col) > 0
+        )
+        SELECT * FROM diff;
+        $f$, table1, table2);
+
+    -- Execute the query
+    EXECUTE dynamic_query;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Export the results to a CSV file
+COPY temp_compare_results 
+TO '/path/to/exported_file.csv' 
+WITH CSV HEADER;
+
+
+-- HTML + JavaScript Code to Display and Filter CSV Data
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Table Results</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f4f4f4; cursor: pointer; }
+        #summary { margin-bottom: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h2>Compare Table Results</h2>
+
+    <input type="file" id="csvFile" accept=".csv">
+    
+    <div>
+        <label for="nbiFilter">Filter NBI Differences:</label>
+        <select id="nbiFilter">
+            <option value="all">All</option>
+            <option value="different">Show Only Different NBI</option>
+        </select>
+
+        <label for="rateFilter">Filter Rate Level Used:</label>
+        <select id="rateFilter">
+            <option value="all">All</option>
+            <option value="not_missing">No Longer RATE_MISSING</option>
+        </select>
+    </div>
+
+    <p id="summary">Matches: 0 | Total NBI Change: 0</p>
+
+    <table id="resultTable">
+        <thead>
+            <tr>
+                <th onclick="sortTable(0)">Ref ID</th>
+                <th onclick="sortTable(1)">Rate Level Used Before</th>
+                <th onclick="sortTable(2)">Rate Level Used After</th>
+                <th onclick="sortTable(3)">NBI Before</th>
+                <th onclick="sortTable(4)">NBI After</th>
+                <th onclick="sortTable(5)">Fields in Difference</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        document.getElementById('csvFile').addEventListener('change', handleFile);
+        document.getElementById('nbiFilter').addEventListener('change', filterTable);
+        document.getElementById('rateFilter').addEventListener('change', filterTable);
+
+        let tableData = [];  
+
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const lines = e.target.result.split("\n").map(line => line.trim());
+                tableData = lines.slice(1).map(line => line.split(",")); 
+
+                displayTable(tableData);
+            };
+            reader.readAsText(file);
+        }
+
+        function displayTable(data) {
+            const tbody = document.querySelector("#resultTable tbody");
+            tbody.innerHTML = "";
+
+            data.forEach(row => {
+                const tr = document.createElement("tr");
+                row.forEach(cell => {
+                    const td = document.createElement("td");
+                    td.textContent = cell;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            filterTable();
+        }
+
+        function filterTable() {
+            const nbiFilter = document.getElementById('nbiFilter').value;
+            const rateFilter = document.getElementById('rateFilter').value;
+            const tbody = document.querySelector("#resultTable tbody");
+            tbody.innerHTML = "";
+
+            let filteredData = tableData.filter(row => {
+                const nbiBefore = row[3];
+                const nbiAfter = row[4];
+                const rateAfter = row[2];
+
+                let matchesNbi = (nbiFilter === "all") || (nbiBefore !== nbiAfter);
+                let matchesRate = (rateFilter === "all") || (rateAfter !== "RATE_MISSING");
+
+                return matchesNbi && matchesRate;
+            });
+
+            filteredData.sort((a, b) => (b[3] - b[4]) - (a[3] - a[4])); 
+
+            filteredData.forEach(row => {
+                const tr = document.createElement("tr");
+                row.forEach(cell => {
+                    const td = document.createElement("td");
+                    td.textContent = cell;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            updateSummary(filteredData);
+        }
+
+        function updateSummary(data) {
+            const totalMatches = data.length;
+            const totalNbiChange = data.reduce((sum, row) => sum + (row[4] - row[3]), 0);
+
+            document.getElementById("summary").textContent = `Matches: ${totalMatches} | Total NBI Change: ${totalNbiChange}`;
+        }
+
+        function sortTable(columnIndex) {
+            const tbody = document.querySelector("#resultTable tbody");
+            let rows = Array.from(tbody.rows);
+
+            rows.sort((rowA, rowB) => {
+                let cellA = rowA.cells[columnIndex].textContent.trim();
+                let cellB = rowB.cells[columnIndex].textContent.trim();
+
+                if (!isNaN(cellA) && !isNaN(cellB)) {
+                    return Number(cellB) - Number(cellA);
+                }
+                return cellA.localeCompare(cellB);
+            });
+
+            tbody.innerHTML = "";
+            rows.forEach(row => tbody.appendChild(row));
+        }
+    </script>
+
+</body>
+</html>
