@@ -1,45 +1,32 @@
-DO $$
-DECLARE
-    col RECORD;
-    dynamic_query TEXT;
-BEGIN
-    -- Initialize the dynamic query
-    dynamic_query := 'WITH diff AS (SELECT t1.air_id, STRING_AGG(' || 
-                     'col_name || '': '' || COALESCE(t1_value, ''NULL'') || '' -> '' || COALESCE(t2_value, ''NULL''), '', '') ' || 
-                     'AS fields_in_difference FROM (';
-
-    -- Dynamically iterate over each column in the tables
-    FOR col IN
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'test1'
-          AND column_name NOT IN ('air_id') -- Exclude primary keys or irrelevant columns
-    LOOP
-        -- Add column comparison to the query
-        dynamic_query := dynamic_query || 
-                         format($f$
-                             SELECT
-                                 t1.air_id,
-                                 '%I' AS col_name,
-                                 t1.%I::TEXT AS t1_value,
-                                 t2.%I::TEXT AS t2_value
-                             FROM test1 t1
-                             JOIN test2 t2 ON t1.air_id = t2.air_id
-                             WHERE t1.%I IS DISTINCT FROM t2.%I
-                             UNION ALL
-                         $f$, col.column_name, col.column_name, col.column_name, col.column_name, col.column_name);
-    END LOOP;
-
-    -- Remove the trailing UNION ALL
-    dynamic_query := regexp_replace(dynamic_query, 'UNION ALL$', '', 'g');
-
-    -- Close the query
-    dynamic_query := dynamic_query || ') sub GROUP BY t1.air_id) SELECT * FROM diff;';
-
-    -- Output the generated query for debugging
-    RAISE NOTICE 'Generated SQL Query: %', dynamic_query;
-
-    -- Execute the dynamic query
-    EXECUTE dynamic_query;
-END $$;
+WITH combined AS (
+    SELECT *, 't1' AS source FROM t1
+    UNION ALL
+    SELECT *, 't2' AS source FROM t2
+),
+differences AS (
+    SELECT
+        ref_id,
+        STRING_AGG(
+            field_name || ': ' || COALESCE(before_value, 'NULL') || ' -> ' || COALESCE(after_value, 'NULL'),
+            ', '
+        ) AS fields_in_difference
+    FROM (
+        SELECT
+            ref_id,
+            column_name AS field_name,
+            MAX(CASE WHEN source = 't1' THEN value END) AS before_value,
+            MAX(CASE WHEN source = 't2' THEN value END) AS after_value
+        FROM (
+            SELECT
+                ref_id,
+                column_name,
+                (combined.*)::TEXT AS value,
+                source
+            FROM combined
+            CROSS JOIN LATERAL (
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name IN ('t1')
+            ) cols
+        ) sub
+HAVINGCL
