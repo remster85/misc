@@ -1,51 +1,46 @@
-CREATE OR REPLACE FUNCTION compare_tables_to_temp(table1 TEXT, table2 TEXT)
-RETURNS TABLE (
-    ref_id INT,
-    rate_level_used_before TEXT,
-    rate_level_used_after TEXT,
-    nbi_before TEXT,
-    nbi_after TEXT,
-    fields_in_difference TEXT
-) AS $$
+DO $$
 DECLARE
+    col RECORD;
     dynamic_query TEXT;
 BEGIN
-    -- Construct the dynamic SQL query
-    dynamic_query := format(
-        $f$
-        WITH diff AS (
-            SELECT 
-                t1.ref_id,
-                t1.rate_level_used::TEXT AS rate_level_used_before,
-                t2.rate_level_used::TEXT AS rate_level_used_after,
-                t1.nbi_eur::TEXT AS nbi_before,
-                t2.nbi_eur::TEXT AS nbi_after,
-                STRING_AGG(
-                    col_name || ': ' || COALESCE(t1_col, 'NULL') || ' -> ' || COALESCE(t2_col, 'NULL'),
-                    ', '
-                ) AS fields_in_difference
-            FROM %1$I t1
-            JOIN %2$I t2 ON t1.ref_id = t2.ref_id
-            CROSS JOIN LATERAL (
-                SELECT 
-                    column_name AS col_name,
-                    (t1.*)::TEXT AS t1_col,
-                    (t2.*)::TEXT AS t2_col
-                FROM information_schema.columns 
-                WHERE table_name = %1$L
-                AND column_name NOT IN ('id', 'ref_id') -- Ignore 'id', only compare relevant columns
-            ) sub
-            WHERE t1_col IS DISTINCT FROM t2_col -- Compare only if values are different
-            GROUP BY t1.ref_id, t1.rate_level_used, t2.rate_level_used, t1.nbi_eur, t2.nbi_eur
-        )
-        SELECT * FROM diff;
-        $f$, table1, table2
-    );
+    -- Start building the dynamic query
+    dynamic_query := 'WITH diff AS (SELECT t1.air_id, STRING_AGG(' || 
+                     'col_name || '': '' || COALESCE(t1_value, ''NULL'') || '' -> '' || COALESCE(t2_value, ''NULL''), '', '') ' || 
+                     'AS fields_in_difference FROM (';
 
-    -- Execute the query and return the result
-    RETURN QUERY EXECUTE dynamic_query;
-END;
-$$ LANGUAGE plpgsql;
+    -- Dynamically iterate over each column in the tables
+    FOR col IN
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'test1'
+          AND column_name NOT IN ('air_id') -- Exclude primary keys or irrelevant columns
+    LOOP
+        -- Add comparison for the current column
+        dynamic_query := dynamic_query || 
+                         format($f$
+                             SELECT
+                                 t1.air_id,
+                                 '%I' AS col_name,
+                                 t1.%I::TEXT AS t1_value,
+                                 t2.%I::TEXT AS t2_value
+                             FROM test1 t1
+                             JOIN test2 t2 ON t1.air_id = t2.air_id
+                             WHERE t1.%I IS DISTINCT FROM t2.%I
+                             UNION ALL
+                         $f$, col.column_name, col.column_name, col.column_name, col.column_name, col.column_name);
+    END LOOP;
+
+    -- Remove the trailing UNION ALL
+    dynamic_query := regexp_replace(dynamic_query, 'UNION ALL$', '', 'g');
+
+    -- Complete the query
+    dynamic_query := dynamic_query || ') sub GROUP BY t1.air_id) SELECT * FROM diff;';
+
+    -- Execute the dynamic query
+    EXECUTE dynamic_query;
+END $$;
+
 
 -- Export the results to a CSV file
 COPY temp_compare_results 
