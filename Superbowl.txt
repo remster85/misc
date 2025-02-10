@@ -1,34 +1,25 @@
-
-
 CREATE OR REPLACE FUNCTION compare_tables_to_temp(table1 TEXT, table2 TEXT)
-RETURNS VOID AS $$
+RETURNS TABLE (
+    ref_id INT,
+    rate_level_used_before TEXT,
+    rate_level_used_after TEXT,
+    nbi_before TEXT,
+    nbi_after TEXT,
+    fields_in_difference TEXT
+) AS $$
 DECLARE
     dynamic_query TEXT;
 BEGIN
-    -- Drop the temp table if it already exists
-    DROP TABLE IF EXISTS temp_compare_results;
-
-    -- Create a temp table to store the results
-    CREATE TEMP TABLE temp_compare_results (
-        ref_id INT,
-        rate_level_used_before TEXT,
-        rate_level_used_after TEXT,
-        nbi_before TEXT,
-        nbi_after TEXT,
-        fields_in_difference TEXT
-    ) ON COMMIT DROP;
-
     -- Construct the dynamic SQL query
     dynamic_query := format(
         $f$
-        INSERT INTO temp_compare_results
         WITH diff AS (
             SELECT 
                 t1.ref_id,
                 t1.rate_level_used AS rate_level_used_before,
                 t2.rate_level_used AS rate_level_used_after,
-                t1.nbi AS nbi_before,
-                t2.nbi AS nbi_after,
+                t1.nbi_eur AS nbi_before,
+                t2.nbi_eur AS nbi_after,
                 STRING_AGG(
                     CASE 
                         WHEN t1_col IS DISTINCT FROM t2_col THEN col_name
@@ -45,17 +36,16 @@ BEGIN
                 WHERE table_name = %1$L
                 AND column_name NOT IN ('id', 'ref_id') -- Ignore 'id', include relevant columns
             ) sub
-            GROUP BY t1.ref_id, t1.rate_level_used, t2.rate_level_used, t1.nbi, t2.nbi
+            GROUP BY t1.ref_id, t1.rate_level_used, t2.rate_level_used, t1.nbi_eur, t2.nbi_eur
             HAVING COUNT(*) FILTER (WHERE t1_col IS DISTINCT FROM t2_col) > 0
         )
         SELECT * FROM diff;
         $f$, table1, table2);
 
-    -- Execute the query
-    EXECUTE dynamic_query;
+    -- Execute the query and return the result
+    RETURN QUERY EXECUTE dynamic_query;
 END;
 $$ LANGUAGE plpgsql;
-
 
 -- Export the results to a CSV file
 COPY temp_compare_results 
