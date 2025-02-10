@@ -3,6 +3,29 @@ WITH combined AS (
     UNION ALL
     SELECT *, 't2' AS source FROM t2
 ),
+field_values AS (
+    SELECT
+        ref_id,
+        column_name AS field_name,
+        MAX(CASE WHEN source = 't1' THEN value END) AS before_value,
+        MAX(CASE WHEN source = 't2' THEN value END) AS after_value
+    FROM (
+        SELECT
+            ref_id,
+            column_name,
+            (combined.*)::TEXT AS value,
+            source
+        FROM combined
+        CROSS JOIN LATERAL (
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 't1' -- Ensure schema matches table
+        ) cols
+    ) field_data
+    GROUP BY ref_id, column_name
+    HAVING COUNT(DISTINCT value) > 1 -- Only select columns with differences
+),
 differences AS (
     SELECT
         ref_id,
@@ -10,23 +33,7 @@ differences AS (
             field_name || ': ' || COALESCE(before_value, 'NULL') || ' -> ' || COALESCE(after_value, 'NULL'),
             ', '
         ) AS fields_in_difference
-    FROM (
-        SELECT
-            ref_id,
-            column_name AS field_name,
-            MAX(CASE WHEN source = 't1' THEN value END) AS before_value,
-            MAX(CASE WHEN source = 't2' THEN value END) AS after_value
-        FROM (
-            SELECT
-                ref_id,
-                column_name,
-                (combined.*)::TEXT AS value,
-                source
-            FROM combined
-            CROSS JOIN LATERAL (
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name IN ('t1')
-            ) cols
-        ) sub
-HAVINGCL
+    FROM field_values
+    GROUP BY ref_id
+)
+SELECT * FROM differences;
