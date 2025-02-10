@@ -36,16 +36,12 @@
     <input type="file" id="csvFile" accept=".csv">
     
     <div>
-        <label for="nbiFilter">Filter NBI Differences:</label>
-        <select id="nbiFilter">
-            <option value="all">All</option>
-            <option value="different">Show Only Different NBI</option>
-        </select>
-
-        <label for="rateFilter">Filter Rate Level Used:</label>
-        <select id="rateFilter">
-            <option value="all">All</option>
-            <option value="not_missing">No Longer RATE_MISSING</option>
+        <label for="filter">Filter Results:</label>
+        <select id="filter">
+            <option value="all">Any Difference</option>
+            <option value="nbi_only">Only NBI Difference</option>
+            <option value="rates_resolved">Only Rates Resolved</option>
+            <option value="rates_changed">Only Rates Changed</option>
         </select>
     </div>
 
@@ -67,8 +63,7 @@
 
     <script>
         document.getElementById('csvFile').addEventListener('change', handleFile);
-        document.getElementById('nbiFilter').addEventListener('change', filterTable);
-        document.getElementById('rateFilter').addEventListener('change', filterTable);
+        document.getElementById('filter').addEventListener('change', filterTable);
 
         let tableData = [];  // Store parsed CSV data
 
@@ -104,20 +99,26 @@
         }
 
         function filterTable() {
-            const nbiFilter = document.getElementById('nbiFilter').value;
-            const rateFilter = document.getElementById('rateFilter').value;
+            const filterValue = document.getElementById('filter').value;
             const tbody = document.querySelector("#resultTable tbody");
             tbody.innerHTML = "";
 
             let filteredData = tableData.filter(row => {
-                const nbiBefore = row[3];
-                const nbiAfter = row[4];
-                const rateAfter = row[2];
+                const rateBefore = row[1].trim();
+                const rateAfter = row[2].trim();
+                const nbiBefore = row[3].trim();
+                const nbiAfter = row[4].trim();
 
-                let matchesNbi = (nbiFilter === "all") || (nbiBefore !== nbiAfter);
-                let matchesRate = (rateFilter === "all") || (rateAfter !== "RATE_MISSING");
+                const isNbiDifferent = nbiBefore !== nbiAfter;
+                const isRateResolved = rateBefore === "RATE_MISSING" && rateAfter !== "RATE_MISSING";
+                const isRateChanged = rateBefore !== "RATE_MISSING" && rateBefore !== rateAfter;
 
-                return matchesNbi && matchesRate;
+                if (filterValue === "all" && (isNbiDifferent || isRateResolved || isRateChanged)) return true;
+                if (filterValue === "nbi_only" && isNbiDifferent) return true;
+                if (filterValue === "rates_resolved" && isRateResolved) return true;
+                if (filterValue === "rates_changed" && isRateChanged) return true;
+
+                return false;
             });
 
             filteredData.sort((a, b) => (b[3] - b[4]) - (a[3] - a[4])); // Sort by NBI difference
