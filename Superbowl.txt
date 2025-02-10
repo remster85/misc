@@ -37,10 +37,9 @@ BEGIN
     -- Complete the query
     dynamic_query := dynamic_query || ') sub GROUP BY t1.air_id) SELECT * FROM diff;';
 
-    -- Execute the dynamic query
-    EXECUTE dynamic_query;
+    -- Execute the query
+    EXECUTE format('%s', dynamic_query);
 END $$;
-
 
 -- Export the results to a CSV file
 COPY temp_compare_results 
