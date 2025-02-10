@@ -20,11 +20,14 @@ BEGIN
                 t2.rate_level_used AS rate_level_used_after,
                 t1.nbi_eur AS nbi_before,
                 t2.nbi_eur AS nbi_after,
-                STRING_AGG(
-                    CASE 
-                        WHEN t1_col IS DISTINCT FROM t2_col THEN col_name
-                        ELSE NULL
-                    END, ', ') AS fields_in_difference
+                CAST(
+                    STRING_AGG(
+                        CASE 
+                            WHEN t1_col IS DISTINCT FROM t2_col THEN col_name
+                            ELSE NULL
+                        END, ', '
+                    ) AS TEXT
+                ) AS fields_in_difference
             FROM %1$I t1
             JOIN %2$I t2 ON t1.ref_id = t2.ref_id
             CROSS JOIN LATERAL (
@@ -40,7 +43,8 @@ BEGIN
             HAVING COUNT(*) FILTER (WHERE t1_col IS DISTINCT FROM t2_col) > 0
         )
         SELECT * FROM diff;
-        $f$, table1, table2);
+        $f$, table1, table2
+    );
 
     -- Execute the query and return the result
     RETURN QUERY EXECUTE dynamic_query;
