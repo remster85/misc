@@ -16,10 +16,10 @@ BEGIN
         WITH diff AS (
             SELECT 
                 t1.ref_id,
-                t1.rate_level_used AS rate_level_used_before,
-                t2.rate_level_used AS rate_level_used_after,
-                t1.nbi_eur AS nbi_before,
-                t2.nbi_eur AS nbi_after,
+                t1.rate_level_used::TEXT AS rate_level_used_before, -- Explicit cast
+                t2.rate_level_used::TEXT AS rate_level_used_after,  -- Explicit cast
+                t1.nbi_eur::TEXT AS nbi_before,                     -- Explicit cast
+                t2.nbi_eur::TEXT AS nbi_after,                      -- Explicit cast
                 CAST(
                     STRING_AGG(
                         CASE 
