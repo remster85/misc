@@ -1,0 +1,30 @@
+# Define Vault parameters
+$vaultServer = "https://your-vault-server:8200"  # Replace with your Vault server URL
+$namespace = "your-namespace"  # Replace with your namespace
+$kvEngine = "kv"  # Replace with your KV engine
+$token = "your-vault-token"  # Replace with your Vault token
+
+# Set headers for Vault API
+$headers = @{
+    "X-Vault-Token" = $token
+}
+
+# If using namespaces, add it to the headers
+if ($namespace -ne "") {
+    $headers["X-Vault-Namespace"] = $namespace
+}
+
+# Get the list of secrets
+$secretsPath = "$vaultServer/v1/$kvEngine/metadata?list=true"
+
+try {
+    $response = Invoke-RestMethod -Uri $secretsPath -Headers $headers -Method GET
+    if ($response.data.keys) {
+        Write-Output "Secrets in Vault KV Store ($kvEngine):"
+        $response.data.keys | ForEach-Object { Write-Output $_ }
+    } else {
+        Write-Output "No secrets found in KV store."
+    }
+} catch {
+    Write-Output "Error accessing Vault: $_"
+}
