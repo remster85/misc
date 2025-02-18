@@ -20,8 +20,31 @@ $secretsPath = "$vaultServer/v1/$kvEngine/metadata?list=true"
 try {
     $response = Invoke-RestMethod -Uri $secretsPath -Headers $headers -Method GET
     if ($response.data.keys) {
-        Write-Output "Secrets in Vault KV Store ($kvEngine):"
-        $response.data.keys | ForEach-Object { Write-Output $_ }
+        Write-Output "Found secrets in Vault KV Store ($kvEngine):"
+        $response.data.keys | ForEach-Object {
+            $secretName = $_.TrimEnd('/')  # Remove trailing slash if present
+            Write-Output "Processing: $secretName"
+
+            # Retrieve key-value pairs from the secret
+            $secretPath = "$vaultServer/v1/$kvEngine/data/$secretName"
+            try {
+                $secretResponse = Invoke-RestMethod -Uri $secretPath -Headers $headers -Method GET
+                $secretData = $secretResponse.data.data
+
+                if ($secretData) {
+                    $outputFile = "$secretName.txt"
+                    Write-Output "Writing secret values to $outputFile"
+
+                    # Write key-value pairs to file
+                    $secretData | Out-File -FilePath $outputFile -Encoding utf8
+
+                } else {
+                    Write-Output "No data found for $secretName"
+                }
+            } catch {
+                Write-Output "Error retrieving secret for $secretName: $_"
+            }
+        }
     } else {
         Write-Output "No secrets found in KV store."
     }
