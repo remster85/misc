@@ -1,38 +1,43 @@
 # Vault Configuration
 $VAULT_ADDR = "http://your-vault-server:8200"   # Replace with your Vault server URL
 $VAULT_TOKEN = "your-vault-token"               # Replace with your Vault token
-$NAMESPACE = "xyz"                              # Namespace to query
+$NAMESPACE = "xyz"                              # Vault namespace
 $MOUNT_PATH = "secret"                          # KV v2 mount path
 
-# Set Vault Environment Variables
-$env:VAULT_ADDR = $VAULT_ADDR
-$env:VAULT_TOKEN = $VAULT_TOKEN
-$env:VAULT_NAMESPACE = $NAMESPACE  # Set namespace for multi-tenancy support
+# Set Headers
+$headers = @{
+    "X-Vault-Token" = $VAULT_TOKEN
+    "X-Vault-Namespace" = $NAMESPACE  # Set namespace for multi-tenancy support
+}
 
 function Get-VaultSecretsRecursive {
     param (
         [string]$path = ""
     )
 
-    # Vault KV v2 API to list secrets
-    $fullPath = "$MOUNT_PATH/metadata/$path".Trim("/")
-    $response = vault kv list -format=json $fullPath 2>$null | ConvertFrom-Json
+    # Build the Vault API URL for listing secrets (KV v2 metadata path)
+    $fullPath = "$VAULT_ADDR/v1/$MOUNT_PATH/metadata/$path" -replace "/$", ""
+    
+    try {
+        # Make API request
+        $response = Invoke-RestMethod -Uri $fullPath -Method GET -Headers $headers
+        $keys = $response.data.keys
 
-    if ($null -eq $response) {
+        $secrets = @()
+        foreach ($key in $keys) {
+            if ($key -match "/$") {
+                # If the key ends with "/", it's a folder; recurse into it
+                $secrets += Get-VaultSecretsRecursive -path "$path$key"
+            } else {
+                $secrets += "$path$key"
+            }
+        }
+
+        return $secrets
+    } catch {
+        # Handle cases where path doesn't exist or no access
         return @()
     }
-
-    $secrets = @()
-    foreach ($key in $response) {
-        if ($key -match "/$") {
-            # If the key ends with "/", it's a folder, recurse into it
-            $secrets += Get-VaultSecretsRecursive -path "$path$key"
-        } else {
-            $secrets += "$path$key"
-        }
-    }
-
-    return $secrets
 }
 
 # Get all secrets recursively
