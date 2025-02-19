@@ -1,78 +1,43 @@
-# Define Vault parameters
-$vaultServer = "https://your-vault-server:8200"  # Replace with your Vault server URL
-$namespace = "your-namespace"  # Replace with your namespace
-$kvEngine = "kv"  # Replace with your KV engine
-$token = "your-vault-token"  # Replace with your Vault token
+# Vault Configuration
+$VAULT_ADDR = "http://your-vault-server:8200"   # Replace with your Vault server URL
+$VAULT_TOKEN = "your-vault-token"               # Replace with your Vault token
+$NAMESPACE = "xyz"                              # Namespace to query
+$MOUNT_PATH = "secret"                          # KV v2 mount path
 
-# Set headers for Vault API
-$headers = @{
-    "X-Vault-Token" = $token
-}
+# Set Vault Environment Variables
+$env:VAULT_ADDR = $VAULT_ADDR
+$env:VAULT_TOKEN = $VAULT_TOKEN
+$env:VAULT_NAMESPACE = $NAMESPACE  # Set namespace for multi-tenancy support
 
-# If using namespaces, add it to the headers
-if ($namespace -ne "") {
-    $headers["X-Vault-Namespace"] = $namespace
-}
-
-# Function to recursively fetch secrets
-function Get-SecretsRecursively {
+function Get-VaultSecretsRecursive {
     param (
-        [string]$path
+        [string]$path = ""
     )
 
-    # Build the API URL to list secrets at this path
-    $listUrl = "$vaultServer/v1/$kvEngine/metadata/$path?list=true"
+    # Vault KV v2 API to list secrets
+    $fullPath = "$MOUNT_PATH/metadata/$path".Trim("/")
+    $response = vault kv list -format=json $fullPath 2>$null | ConvertFrom-Json
 
-    try {
-        $response = Invoke-RestMethod -Uri $listUrl -Headers $headers -Method GET
-
-        if ($response.data.keys) {
-            foreach ($key in $response.data.keys) {
-                $fullPath = "$path/$key".Trim("/")  # Ensure clean path format
-
-                if ($key -match "/$") {
-                    # If the key ends with '/', it's a sub-path (folder), so recurse
-                    Get-SecretsRecursively -path $fullPath.TrimEnd('/')
-                } else {
-                    # Otherwise, it's a valid secret, so fetch and store it
-                    Get-AndStoreSecret -path $fullPath
-                }
-            }
-        } else {
-            Write-Output "No secrets found in path: $path"
-        }
-    } catch {
-        Write-Output "Error accessing Vault at path: $path - $_"
+    if ($null -eq $response) {
+        return @()
     }
+
+    $secrets = @()
+    foreach ($key in $response) {
+        if ($key -match "/$") {
+            # If the key ends with "/", it's a folder, recurse into it
+            $secrets += Get-VaultSecretsRecursive -path "$path$key"
+        } else {
+            $secrets += "$path$key"
+        }
+    }
+
+    return $secrets
 }
 
-# Function to retrieve and store secrets
-function Get-AndStoreSecret {
-    param (
-        [string]$path
-    )
+# Get all secrets recursively
+$secrets = Get-VaultSecretsRecursive
 
-    # Build the API URL to fetch the secret data
-    $secretUrl = "$vaultServer/v1/$kvEngine/data/$path"
-
-    try {
-        $secretResponse = Invoke-RestMethod -Uri $secretUrl -Headers $headers -Method GET
-        $secretData = $secretResponse.data.data
-
-        if ($secretData) {
-            # Generate a safe file name (replace slashes with underscores)
-            $safeFileName = ($path -replace '[\/:]', '_') + ".txt"
-            Write-Output "Saving secret from $path to $safeFileName"
-
-            # Write key-value pairs to file
-            $secretData | Out-File -FilePath $safeFileName -Encoding utf8
-        } else {
-            Write-Output "No data found for $path"
-        }
-    } catch {
-        Write-Output "Error retrieving secret at path: $path - $_"
-    }
-}
-
-# Start recursion from the root of the KV engine
-Get-SecretsRecursively -path ""
+# Output the list of secrets
+Write-Host "Secrets under namespace '$NAMESPACE' in '$MOUNT_PATH':"
+$secrets | ForEach-Object { Write-Host "- $_" }
