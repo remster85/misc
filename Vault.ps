@@ -14,40 +14,65 @@ if ($namespace -ne "") {
     $headers["X-Vault-Namespace"] = $namespace
 }
 
-# Get the list of secrets
-$secretsPath = "$vaultServer/v1/$kvEngine/metadata?list=true"
+# Function to recursively fetch secrets
+function Get-SecretsRecursively {
+    param (
+        [string]$path
+    )
 
-try {
-    $response = Invoke-RestMethod -Uri $secretsPath -Headers $headers -Method GET
-    if ($response.data.keys) {
-        Write-Output "Found secrets in Vault KV Store ($kvEngine):"
-        $response.data.keys | ForEach-Object {
-            $secretName = $_.TrimEnd('/')  # Remove trailing slash if present
-            Write-Output "Processing: $secretName"
+    # Build the API URL to list secrets at this path
+    $listUrl = "$vaultServer/v1/$kvEngine/metadata/$path?list=true"
 
-            # Retrieve key-value pairs from the secret
-            $secretPath = "$vaultServer/v1/$kvEngine/data/$secretName"
-            try {
-                $secretResponse = Invoke-RestMethod -Uri $secretPath -Headers $headers -Method GET
-                $secretData = $secretResponse.data.data
+    try {
+        $response = Invoke-RestMethod -Uri $listUrl -Headers $headers -Method GET
 
-                if ($secretData) {
-                    $outputFile = "$secretName.txt"
-                    Write-Output "Writing secret values to $outputFile"
+        if ($response.data.keys) {
+            foreach ($key in $response.data.keys) {
+                $fullPath = "$path/$key".Trim("/")  # Ensure clean path format
 
-                    # Write key-value pairs to file
-                    $secretData | Out-File -FilePath $outputFile -Encoding utf8
-
+                if ($key -match "/$") {
+                    # If the key ends with '/', it's a sub-path (folder), so recurse
+                    Get-SecretsRecursively -path $fullPath.TrimEnd('/')
                 } else {
-                    Write-Output "No data found for $secretName"
+                    # Otherwise, it's a valid secret, so fetch and store it
+                    Get-AndStoreSecret -path $fullPath
                 }
-            } catch {
-                Write-Output "Error retrieving secret for $secretName: $_"
             }
+        } else {
+            Write-Output "No secrets found in path: $path"
         }
-    } else {
-        Write-Output "No secrets found in KV store."
+    } catch {
+        Write-Output "Error accessing Vault at path: $path - $_"
     }
-} catch {
-    Write-Output "Error accessing Vault: $_"
 }
+
+# Function to retrieve and store secrets
+function Get-AndStoreSecret {
+    param (
+        [string]$path
+    )
+
+    # Build the API URL to fetch the secret data
+    $secretUrl = "$vaultServer/v1/$kvEngine/data/$path"
+
+    try {
+        $secretResponse = Invoke-RestMethod -Uri $secretUrl -Headers $headers -Method GET
+        $secretData = $secretResponse.data.data
+
+        if ($secretData) {
+            # Generate a safe file name (replace slashes with underscores)
+            $safeFileName = ($path -replace '[\/:]', '_') + ".txt"
+            Write-Output "Saving secret from $path to $safeFileName"
+
+            # Write key-value pairs to file
+            $secretData | Out-File -FilePath $safeFileName -Encoding utf8
+        } else {
+            Write-Output "No data found for $path"
+        }
+    } catch {
+        Write-Output "Error retrieving secret at path: $path - $_"
+    }
+}
+
+# Start recursion from the root of the KV engine
+Get-SecretsRecursively -path ""
